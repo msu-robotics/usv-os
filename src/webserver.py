@@ -14,6 +14,13 @@ vehicle = SurfaceVehicle(pins)
 async def index(request):
     return send_file('src/static/index.html')
 
+@app.route('/static/<path:path>')
+async def index(request, path):
+    if '..' in path:
+        # directory traversal is not allowed
+        return 'Not found', 404
+    return send_file('src/static/' + path, content_type='image/svg+xml')
+
 
 # Маршрут для обработки WebSocket соединений
 @app.route('/ws')
@@ -24,11 +31,12 @@ async def websocket(request, ws):
             message = await ws.receive()
             if message:
                 data = json.loads(message)
-                forward = data.get('forward', 0)
-                lateral = data.get('lateral', 0)
-
+                speed = int(data.get('speedMultiplier', 100))
+                forward = float(data.get('forward', 0))
+                lateral = float(data.get('lateral', 0))
+                print(forward, lateral)
                 # Преобразуем отклонение джойстика в скорости двигателей
-                vehicle.set_motors(forward * 100, 0, lateral * 100)
+                vehicle.set_motors(forward * speed, 0, lateral * speed)
         except Exception as e:
             print('WebSocket error:', e)
             break

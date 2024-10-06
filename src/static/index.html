@@ -1,97 +1,204 @@
 <html>
-        <head>
-            <title>Control Interface</title>
-            <style>
-                body { font-family: Arial, sans-serif; text-align: center; }
-                canvas { border: 1px solid black; margin-top: 20px; }
-            </style>
-        </head>
-        <body>
-            <h1>DROP-BOX</h1>
-            <canvas id="joystick" width="300" height="300"></canvas>
+<head>
+    <title>DROP-BOX Control Interface</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #f0f0f0;
+            text-align: center;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 {
+            color: #333;
+            font-size: 36px;
+            margin-top: 20px;
+        }
+        #logo {
+            width: 400px;
+            height: 60px;
+            margin-top: 20px;
+        }
+        #joystick {
+            border: 5px solid #888;
+            border-radius: 50%;
+            background: radial-gradient(circle, #ddd 50%, #aaa 100%);
+            margin-top: 20px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+        input[type=range] {
+            width: 100%;
+            max-width: 300px;
+            margin-top: 20px;
+            appearance: none;
+            height: 10px;
+            background: #ddd;
+            border-radius: 5px;
+            outline: none;
+            transition: background 0.3s ease;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #007BFF;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        input[type=range]:hover {
+            background: #ccc;
+        }
+        #sliderValue {
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 10px;
+            color: #007BFF;
+        }
 
-            <script>
-                let ws = new WebSocket('ws://' + window.location.host + '/ws');
-                let joystick = document.getElementById("joystick");
-                let ctx = joystick.getContext("2d");
+        /* Адаптивные стили для мобильных устройств */
+        @media only screen and (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            h1 {
+                font-size: 24px;
+            }
+            #joystick {
+                width: 250px;
+                height: 250px;
+            }
+            #logo {
+                width: 120px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Логотип DROP-BOX -->
+    <img id="logo" src="static/logo.svg" alt="DROP-BOX Logo">
+    <h1></h1>
 
-                let centerX = joystick.width / 2;
-                let centerY = joystick.height / 2;
-                let radius = 100;
-                let knobX = centerX;
-                let knobY = centerY;
-                let isDragging = false;
+    <!-- Слайдер для управления мощностью -->
+    <label for="speedSlider">Set Speed Multiplier:</label><br>
+    <input type="range" id="speedSlider" min="0" max="100" value="100" onchange="updateSpeed()"><br>
+    <span id="sliderValue">100</span>%
 
-                function drawJoystick() {
-                    ctx.clearRect(0, 0, joystick.width, joystick.height);
-                    ctx.beginPath();
-                    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-                    ctx.stroke();
+    <canvas id="joystick" width="300" height="300"></canvas>
 
-                    ctx.beginPath();
-                    ctx.arc(knobX, knobY, 20, 0, Math.PI * 2);
-                    ctx.fill();
-                }
+    <script>
+        let ws = new WebSocket('ws://' + window.location.host + '/ws');
+        let joystick = document.getElementById("joystick");
+        let ctx = joystick.getContext("2d");
 
-                joystick.addEventListener('mousedown', function(e) {
-                    let rect = joystick.getBoundingClientRect();
-                    let x = e.clientX - rect.left;
-                    let y = e.clientY - rect.top;
+        let centerX = joystick.width / 2;
+        let centerY = joystick.height / 2;
+        let radius = 120;
+        let knobX = centerX;
+        let knobY = centerY;
+        let isDragging = false;
+        let speedMultiplier = 100;  // Мощность двигателей по умолчанию
 
-                    // Проверяем, попал ли курсор в ручку джойстика
-                    let dx = x - knobX;
-                    let dy = y - knobY;
-                    let distance = Math.sqrt(dx * dx + dy * dy);
-                    if (distance < 20) {
-                        isDragging = true;
-                    }
-                });
+        // Обновление скорости слайдера
+        function updateSpeed() {
+            let slider = document.getElementById("speedSlider");
+            let sliderValue = document.getElementById("sliderValue");
+            speedMultiplier = slider.value;
+            sliderValue.innerText = slider.value;
+            ws.send(JSON.stringify({ speedMultiplier: speedMultiplier }));
+        }
 
-                joystick.addEventListener('mousemove', function(e) {
-                    if (!isDragging) return;
+        function drawJoystick() {
+            ctx.clearRect(0, 0, joystick.width, joystick.height);
 
-                    let rect = joystick.getBoundingClientRect();
-                    let x = e.clientX - rect.left;
-                    let y = e.clientY - rect.top;
+            // Рисуем основание джойстика
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(100, 100, 100, 0.1)';
+            ctx.fill();
 
-                    let dx = x - centerX;
-                    let dy = y - centerY;
-                    let distance = Math.sqrt(dx * dx + dy * dy);
-                    if (distance < radius) {
-                        knobX = x;
-                        knobY = y;
-                    } else {
-                        let angle = Math.atan2(dy, dx);
-                        knobX = centerX + radius * Math.cos(angle);
-                        knobY = centerY + radius * Math.sin(angle);
-                    }
+            // Рисуем ручку джойстика
+            ctx.beginPath();
+            ctx.arc(knobX, knobY, 30, 0, Math.PI * 2);
+            ctx.fillStyle = '#007BFF';
+            ctx.fill();
+            ctx.shadowColor = 'rgba(0, 123, 255, 0.5)';
+            ctx.shadowBlur = 20;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+        }
 
-                    let forward = -(knobY - centerY) / radius;
-                    let lateral = (knobX - centerX) / radius;
+        // Обработчик для событий мыши (для ПК)
+        joystick.addEventListener('mousedown', function(e) {
+            handleStart(e.clientX, e.clientY);
+        });
 
-                    ws.send(JSON.stringify({ forward: forward, lateral: lateral }));
-                    drawJoystick();
-                });
+        joystick.addEventListener('mousemove', function(e) {
+            if (isDragging) handleMove(e.clientX, e.clientY);
+        });
 
-                joystick.addEventListener('mouseup', function(e) {
-                    isDragging = false;
-                    knobX = centerX;
-                    knobY = centerY;
-                    ws.send(JSON.stringify({ forward: 0, lateral: 0 }));
-                    drawJoystick();
-                });
+        joystick.addEventListener('mouseup', function(e) {
+            handleEnd();
+        });
 
-                joystick.addEventListener('mouseleave', function(e) {
-                    if (isDragging) {
-                        isDragging = false;
-                        knobX = centerX;
-                        knobY = centerY;
-                        ws.send(JSON.stringify({ forward: 0, lateral: 0 }));
-                        drawJoystick();
-                    }
-                });
+        // Обработчики для сенсорных экранов (touch events)
+        joystick.addEventListener('touchstart', function(e) {
+            let touch = e.touches[0];
+            handleStart(touch.clientX, touch.clientY);
+        });
 
-                drawJoystick();
-            </script>
-        </body>
-        </html>
+        joystick.addEventListener('touchmove', function(e) {
+            e.preventDefault();  // Предотвращаем прокрутку экрана при перемещении
+            let touch = e.touches[0];
+            handleMove(touch.clientX, touch.clientY);
+        });
+
+        joystick.addEventListener('touchend', function(e) {
+            handleEnd();
+        });
+
+        function handleStart(x, y) {
+            let rect = joystick.getBoundingClientRect();
+            let dx = x - rect.left - knobX;
+            let dy = y - rect.top - knobY;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < 30) {
+                isDragging = true;
+            }
+        }
+
+        function handleMove(x, y) {
+            if (!isDragging) return;
+
+            let rect = joystick.getBoundingClientRect();
+            let dx = x - rect.left - centerX;
+            let dy = y - rect.top - centerY;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < radius) {
+                knobX = x - rect.left;
+                knobY = y - rect.top;
+            } else {
+                let angle = Math.atan2(dy, dx);
+                knobX = centerX + radius * Math.cos(angle);
+                knobY = centerY + radius * Math.sin(angle);
+            }
+
+            let forward = -(knobY - centerY) / radius;
+            let lateral = (knobX - centerX) / radius;
+
+            ws.send(JSON.stringify({forward: forward, lateral: lateral, speedMultiplier: speedMultiplier}));
+            drawJoystick();
+        }
+
+        function handleEnd() {
+            isDragging = false;
+            knobX = centerX;
+            knobY = centerY;
+            ws.send(JSON.stringify({forward: 0, lateral: 0, speedMultiplier: speedMultiplier}));
+            drawJoystick();
+        }
+
+        drawJoystick();
+    </script>
+</body>
+</html>
