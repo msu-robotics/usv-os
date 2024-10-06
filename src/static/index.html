@@ -1,0 +1,97 @@
+<html>
+        <head>
+            <title>Control Interface</title>
+            <style>
+                body { font-family: Arial, sans-serif; text-align: center; }
+                canvas { border: 1px solid black; margin-top: 20px; }
+            </style>
+        </head>
+        <body>
+            <h1>DROP-BOX</h1>
+            <canvas id="joystick" width="300" height="300"></canvas>
+
+            <script>
+                let ws = new WebSocket('ws://' + window.location.host + '/ws');
+                let joystick = document.getElementById("joystick");
+                let ctx = joystick.getContext("2d");
+
+                let centerX = joystick.width / 2;
+                let centerY = joystick.height / 2;
+                let radius = 100;
+                let knobX = centerX;
+                let knobY = centerY;
+                let isDragging = false;
+
+                function drawJoystick() {
+                    ctx.clearRect(0, 0, joystick.width, joystick.height);
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.arc(knobX, knobY, 20, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                joystick.addEventListener('mousedown', function(e) {
+                    let rect = joystick.getBoundingClientRect();
+                    let x = e.clientX - rect.left;
+                    let y = e.clientY - rect.top;
+
+                    // Проверяем, попал ли курсор в ручку джойстика
+                    let dx = x - knobX;
+                    let dy = y - knobY;
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < 20) {
+                        isDragging = true;
+                    }
+                });
+
+                joystick.addEventListener('mousemove', function(e) {
+                    if (!isDragging) return;
+
+                    let rect = joystick.getBoundingClientRect();
+                    let x = e.clientX - rect.left;
+                    let y = e.clientY - rect.top;
+
+                    let dx = x - centerX;
+                    let dy = y - centerY;
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < radius) {
+                        knobX = x;
+                        knobY = y;
+                    } else {
+                        let angle = Math.atan2(dy, dx);
+                        knobX = centerX + radius * Math.cos(angle);
+                        knobY = centerY + radius * Math.sin(angle);
+                    }
+
+                    let forward = -(knobY - centerY) / radius;
+                    let lateral = (knobX - centerX) / radius;
+
+                    ws.send(JSON.stringify({ forward: forward, lateral: lateral }));
+                    drawJoystick();
+                });
+
+                joystick.addEventListener('mouseup', function(e) {
+                    isDragging = false;
+                    knobX = centerX;
+                    knobY = centerY;
+                    ws.send(JSON.stringify({ forward: 0, lateral: 0 }));
+                    drawJoystick();
+                });
+
+                joystick.addEventListener('mouseleave', function(e) {
+                    if (isDragging) {
+                        isDragging = false;
+                        knobX = centerX;
+                        knobY = centerY;
+                        ws.send(JSON.stringify({ forward: 0, lateral: 0 }));
+                        drawJoystick();
+                    }
+                });
+
+                drawJoystick();
+            </script>
+        </body>
+        </html>
