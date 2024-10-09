@@ -38,14 +38,19 @@ class ESC:
         """
         Установить скорость ESC.
 
-        :param speed: Скорость, от 0 до 100
+        :param speed: Скорость, от 100 до 100
         """
-        if speed < 0:
-            speed = 0
+        if speed < -100:
+            speed = -100
         elif speed > 100:
             speed = 100
 
-        pulse_width = self.min_pulse + (speed / 100) * (self.max_pulse - self.min_pulse)
+        mid_pulse = (self.max_pulse + self.min_pulse) / 2
+        scale = mid_pulse / 100
+
+        speed = int(scale * speed)
+
+        pulse_width = mid_pulse + speed
         duty = self.pulse_width_to_duty(pulse_width)
         self.pwm.duty_u16(duty)
 
@@ -112,8 +117,11 @@ class SurfaceVehicle:
 
         # Устанавливаем минимальный сигнал на всех ESC
         for motor in self.motors:
-            motor.set_speed(0)  # Минимальный сигнал (0%)
+            motor.set_speed(-100)  # Реверсивный сигнал (-100%)
         time.sleep(2)  # Ждем 2 секунды
+
+        for motor in self.motors:
+            motor.set_speed(0)  # Нулевое положение (0%)
 
         print("ESC calibration complete.")
 
