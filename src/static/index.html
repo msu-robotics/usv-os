@@ -1,35 +1,76 @@
+<!DOCTYPE html>
 <html>
 <head>
     <title>DROP-BOX Control Interface</title>
     <style>
+        /* Стили остаются прежними */
         body {
             font-family: 'Arial', sans-serif;
             background: #f0f0f0;
-            text-align: center;
-            padding: 20px;
             margin: 0;
         }
-        h1 {
-            color: #333;
-            font-size: 36px;
-            margin-top: 20px;
+        /* Верхний бар */
+        #top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: #fff;
+            padding: 10px 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
         #logo {
-            width: 400px;
-            height: 60px;
-            margin-top: 20px;
+            height: 50px;
+        }
+        #top-bar h1 {
+            margin: 0;
+            font-size: 24px;
+            color: #333;
+        }
+
+        /* Основной контент */
+        #content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        #controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            max-width: 1200px;
+            width: 100%;
+        }
+        .control-section {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            flex: 1 1 300px;
+            max-width: 500px;
+            text-align: center;
+        }
+        .control-section h2 {
+            margin-top: 0;
+            color: #333;
         }
         #joystick {
             border: 5px solid #888;
             border-radius: 50%;
             background: radial-gradient(circle, #ddd 50%, #aaa 100%);
-            margin-top: 20px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            margin: 0 auto;
+        }
+        #magnetometerCanvas {
+            border: 1px solid #888;
+            background: #fff;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            margin: 0 auto;
         }
         input[type=range] {
             width: 100%;
-            max-width: 300px;
-            margin-top: 20px;
+            margin-top: 10px;
             appearance: none;
             height: 10px;
             background: #ddd;
@@ -58,36 +99,58 @@
 
         /* Адаптивные стили для мобильных устройств */
         @media only screen and (max-width: 600px) {
-            body {
-                padding: 10px;
-            }
-            h1 {
-                font-size: 24px;
-            }
-            #joystick {
-                width: 250px;
-                height: 250px;
+            #top-bar h1 {
+                font-size: 18px;
             }
             #logo {
-                width: 120px;
+                height: 40px;
+            }
+            .control-section {
+                padding: 15px;
+            }
+            #joystick, #magnetometerCanvas {
+                width: 250px;
+                height: 250px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- Логотип DROP-BOX -->
-    <img id="logo" src="static/logo.svg" alt="DROP-BOX Logo">
-    <h1></h1>
+    <!-- Верхний бар с логотипом и названием -->
+    <div id="top-bar">
+        <img id="logo" src="static/logo.svg" alt="DROP-BOX Logo">
+        <h1>DROP-BOX Control Interface</h1>
+    </div>
 
-    <!-- Слайдер для управления мощностью -->
-    <label for="speedSlider">Set Speed Multiplier:</label><br>
-    <input type="range" id="speedSlider" min="0" max="100" value="100" onchange="updateSpeed()"><br>
-    <span id="sliderValue">100</span>%
+    <div id="content">
+        <!-- Секции управления -->
+        <div id="controls">
+            <!-- Секция слайдера скорости -->
+            <div class="control-section">
+                <h2>Set Speed Multiplier</h2>
+                <input type="range" id="speedSlider" min="0" max="100" value="100" onchange="updateSpeed()"><br>
+                <span id="sliderValue">100</span>%
+            </div>
 
-    <canvas id="joystick" width="300" height="300"></canvas>
+            <!-- Секция джойстика -->
+            <div class="control-section">
+                <h2>Joystick Control</h2>
+                <canvas id="joystick" width="300" height="300"></canvas>
+            </div>
+
+            <!-- Секция магнетометра -->
+            <div class="control-section">
+                <h2>Magnetometer Visualization</h2>
+                <canvas id="magnetometerCanvas" width="300" height="300"></canvas>
+                <!-- Элемент для отображения значения угла -->
+                <div id="headingValue" style="margin-top: 10px; font-size: 18px; color: #333;"></div>
+            </div>
+        </div>
+    </div>
 
     <script>
         let ws = new WebSocket('ws://' + window.location.host + '/ws');
+        let telemetry_ws = new WebSocket('ws://' + window.location.host + '/telemetry');
         let joystick = document.getElementById("joystick");
         let ctx = joystick.getContext("2d");
 
@@ -98,6 +161,11 @@
         let knobY = centerY;
         let isDragging = false;
         let speedMultiplier = 100;  // Мощность двигателей по умолчанию
+
+        // Получаем канвас и контекст для магнетометра
+        let magnetometerCanvas = document.getElementById('magnetometerCanvas');
+        let magnetometerCtx = magnetometerCanvas.getContext('2d');
+        let headingDisplay = document.getElementById('headingValue');
 
         // Обновление скорости слайдера
         function updateSpeed() {
@@ -186,7 +254,7 @@
             let forward = -(knobY - centerY) / radius;
             let lateral = (knobX - centerX) / radius;
 
-            ws.send(JSON.stringify({forward: forward, lateral: lateral, speedMultiplier: speedMultiplier}));
+            ws.send(JSON.stringify({ forward: forward, lateral: lateral, speedMultiplier: speedMultiplier }));
             drawJoystick();
         }
 
@@ -194,11 +262,118 @@
             isDragging = false;
             knobX = centerX;
             knobY = centerY;
-            ws.send(JSON.stringify({forward: 0, lateral: 0, speedMultiplier: speedMultiplier}));
+            ws.send(JSON.stringify({ forward: 0, lateral: 0, speedMultiplier: speedMultiplier }));
             drawJoystick();
         }
 
         drawJoystick();
+
+        // Обработка данных с магнетометра
+        telemetry_ws.onmessage = function(event) {
+            let data = JSON.parse(event.data);
+            console.log(data);
+
+            // Получаем значение mx
+            let mx = data.magnetometer && data.magnetometer.yaw;
+
+            updateMagnetometer(mx);
+        };
+
+        // Устанавливаем значение по умолчанию при загрузке страницы
+        updateMagnetometer(null);
+
+        function updateMagnetometer(mx) {
+            // Очищаем канвас
+            magnetometerCtx.clearRect(0, 0, magnetometerCanvas.width, magnetometerCanvas.height);
+
+            let heading;
+
+            // Диапазон возможных значений mx (необходимо настроить под ваши данные)
+            let minMx = -180; // минимальное значение mx
+            let maxMx = 180;  // максимальное значение mx
+
+            // Проверяем, есть ли валидные данные
+            if (typeof mx !== 'number') {
+                // Если данных нет, устанавливаем угол направления на север (0°)
+                heading = 0;
+                mx = 0;
+            } else {
+                // Ограничиваем значение mx диапазоном
+                if (mx < minMx) mx = minMx;
+                if (mx > maxMx) mx = maxMx;
+
+                // Нормализуем mx в диапазон от 0 до 360 градусов
+                heading = ((mx - minMx) / (maxMx - minMx)) * 360;
+            }
+
+            // Округляем значение угла
+            let roundedHeading = Math.round(heading);
+
+            // Рисуем компас
+            let centerX = magnetometerCanvas.width / 2;
+            let centerY = magnetometerCanvas.height / 2;
+            let radius = 100;
+
+            // Рисуем круг компаса
+            magnetometerCtx.beginPath();
+            magnetometerCtx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            magnetometerCtx.strokeStyle = '#333';
+            magnetometerCtx.lineWidth = 2;
+            magnetometerCtx.stroke();
+
+            // Обозначения на компасе
+            magnetometerCtx.font = '16px Arial';
+            magnetometerCtx.fillStyle = '#000';
+            magnetometerCtx.textAlign = 'center';
+            magnetometerCtx.textBaseline = 'middle';
+            magnetometerCtx.fillText('N', centerX, centerY - radius + 15);
+            magnetometerCtx.fillText('S', centerX, centerY + radius - 15);
+            magnetometerCtx.fillText('E', centerX + radius - 15, centerY);
+            magnetometerCtx.fillText('W', centerX - radius + 15, centerY);
+
+            // Рисуем отметки градусов
+            for (let i = 0; i < 360; i += 30) {
+                let rad = (i - 90) * (Math.PI / 180);
+                let x1 = centerX + (radius - 10) * Math.cos(rad);
+                let y1 = centerY + (radius - 10) * Math.sin(rad);
+                let x2 = centerX + radius * Math.cos(rad);
+                let y2 = centerY + radius * Math.sin(rad);
+
+                magnetometerCtx.beginPath();
+                magnetometerCtx.moveTo(x1, y1);
+                magnetometerCtx.lineTo(x2, y2);
+                magnetometerCtx.strokeStyle = '#333';
+                magnetometerCtx.lineWidth = 1;
+                magnetometerCtx.stroke();
+            }
+
+            // Рисуем стрелку компаса
+            magnetometerCtx.save();
+            magnetometerCtx.translate(centerX, centerY);
+            magnetometerCtx.rotate((heading - 90) * Math.PI / 180); // Поворачиваем стрелку
+
+            // Рисуем стрелку
+            magnetometerCtx.beginPath();
+            magnetometerCtx.moveTo(0, 10);
+            magnetometerCtx.lineTo(0, -radius + 20);
+            magnetometerCtx.strokeStyle = 'red';
+            magnetometerCtx.lineWidth = 4;
+            magnetometerCtx.stroke();
+
+            // Рисуем наконечник стрелки
+            magnetometerCtx.beginPath();
+            magnetometerCtx.moveTo(0, -radius + 20);
+            magnetometerCtx.lineTo(-10, -radius + 40);
+            magnetometerCtx.lineTo(10, -radius + 40);
+            magnetometerCtx.closePath();
+            magnetometerCtx.fillStyle = 'red';
+            magnetometerCtx.fill();
+
+            magnetometerCtx.restore();
+
+            // Отображаем округленное значение mx под компасом
+            headingDisplay.innerText = 'Mx: ' + mx.toFixed(2) + ', Angle: ' + roundedHeading;
+        }
     </script>
 </body>
 </html>
