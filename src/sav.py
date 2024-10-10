@@ -46,7 +46,7 @@ class ESC:
             speed = 100
 
         mid_pulse = (self.max_pulse + self.min_pulse) / 2
-        scale = mid_pulse / 100
+        scale = (mid_pulse - self.min_pulse)/100
 
         speed = int(scale * speed)
 
@@ -90,14 +90,13 @@ class SurfaceVehicle:
         # Создаем объекты ESC для каждого двигателя
         self.motors = [ESC(pin, min_pulse, max_pulse, frequency) for pin in pins]
 
-        # Определение матрицы: строки - двигатели, столбцы - параметры маневров (вперед/назад, поворот, лаг)
-        # Стандартная конфигурация для квадрокоптера с возможностью движения лагом
+        # Определение матрицы: строки - двигатели, столбцы - оси движения, x, y, rz(поворот по оси z)
         if motor_matrix is None:
             self.motor_matrix = [
-                [1, 1, -1],  # Левый передний двигатель (LF)
-                [1, -1, 1],  # Правый передний двигатель (RF)
-                [-1, 1, 1],  # Левый задний двигатель (LB)
-                [-1, -1, -1]  # Правый задний двигатель (RB)
+                [1,  1,  1],  # Левый передний двигатель (LF)
+                [1, -1, -1],  # Правый передний двигатель (RF)
+                [-1, 1, -1],  # Левый задний двигатель (LB)
+                [-1,-1,  1]  # Правый задний двигатель (RB)
             ]
         else:
             self.motor_matrix = motor_matrix
@@ -125,7 +124,7 @@ class SurfaceVehicle:
 
         print("ESC calibration complete.")
 
-    def set_motors(self, forward_speed, yaw_speed, lateral_speed):
+    def set_motors(self, forward_speed, lateral_speed, yaw_speed):
         """
         Устанавливает скорость двигателей в зависимости от направлений по матрице.
 
@@ -136,15 +135,15 @@ class SurfaceVehicle:
         for i, motor in enumerate(self.motors):
             # Рассчитываем скорость для каждого двигателя на основе матрицы
             speed = (self.motor_matrix[i][0] * forward_speed) + \
-                    (self.motor_matrix[i][1] * yaw_speed) + \
-                    (self.motor_matrix[i][2] * lateral_speed)
+                    (self.motor_matrix[i][1] * lateral_speed) + \
+                    (self.motor_matrix[i][2] * yaw_speed)
             motor.set_speed(speed)
 
     def move_forward(self, speed):
         """
         Движение вперед на заданной скорости.
 
-        :param speed: Скорость от 0 до 100.
+        :param speed: Скорость от -100 до 100.
         """
         self.set_motors(speed, 0, 0)
 
@@ -152,7 +151,7 @@ class SurfaceVehicle:
         """
         Движение назад на заданной скорости.
 
-        :param speed: Скорость от 0 до 100.
+        :param speed: Скорость от -100 до 100.
         """
         self.set_motors(-speed, 0, 0)
 
@@ -160,7 +159,7 @@ class SurfaceVehicle:
         """
         Поворот вправо.
 
-        :param speed: Скорость поворота (от 0 до 100).
+        :param speed: Скорость поворота (от -100 до 100).
         """
         self.set_motors(0, speed, 0)
 
@@ -168,7 +167,7 @@ class SurfaceVehicle:
         """
         Поворот влево.
 
-        :param speed: Скорость поворота (от 0 до 100).
+        :param speed: Скорость поворота (от -100 до 100).
         """
         self.set_motors(0, -speed, 0)
 
@@ -176,7 +175,7 @@ class SurfaceVehicle:
         """
         Движение вправо (лагом) на заданной скорости.
 
-        :param speed: Скорость от 0 до 100.
+        :param speed: Скорость от -100 до 100.
         """
         self.set_motors(0, 0, speed)
 
@@ -184,7 +183,7 @@ class SurfaceVehicle:
         """
         Движение влево (лагом) на заданной скорости.
 
-        :param speed: Скорость от 0 до 100.
+        :param speed: Скорость от -100 до 100.
         """
         self.set_motors(0, 0, -speed)
 

@@ -46,7 +46,7 @@ async def websocket(request, ws):
                 forward = float(data.get('forward', 0))
                 lateral = float(data.get('lateral', 0))
                 # Преобразуем отклонение джойстика в скорости двигателей
-                vehicle.set_motors(forward * speed, 0, lateral * speed)
+                vehicle.set_motors(forward * speed, lateral * speed, 0)
         except Exception as e:
             print('WebSocket error:', e)
             break
