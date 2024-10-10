@@ -1,7 +1,6 @@
-from machine import Pin, PWM
-
 import time
 from machine import Pin, PWM
+from src.pid_controller import PIDController
 
 
 class ESC:
@@ -90,24 +89,31 @@ class SurfaceVehicle:
         # Создаем объекты ESC для каждого двигателя
         self.motors = [ESC(pin, min_pulse, max_pulse, frequency) for pin in pins]
 
-        # Определение матрицы: строки - двигатели, столбцы - оси движения, x, y, rz(поворот по оси z)
+        # Определение матрицы: строки - двигатели, столбцы - оси движения: [вперед/назад, боковое, поворот]
         if motor_matrix is None:
             self.motor_matrix = [
-                [1,  1,  1],  # Левый передний двигатель (LF)
-                [1, -1, -1],  # Правый передний двигатель (RF)
-                [-1, 1, -1],  # Левый задний двигатель (LB)
-                [-1,-1,  1]  # Правый задний двигатель (RB)
+                [1,  1,  1],   # Левый передний двигатель (LF)
+                [1, -1, -1],   # Правый передний двигатель (RF)
+                [-1, 1, -1],   # Левый задний двигатель (LB)
+                [-1,-1,  1]    # Правый задний двигатель (RB)
             ]
         else:
             self.motor_matrix = motor_matrix
 
         self.calibrate_all_esc()
 
+        self.mode = 'manual'  # Режим управления: 'manual' или 'stabilization'
+        self.pid_controller = PIDController(0, 0, 0)  # Инициализация PID-регулятора с коэффициентами по умолчанию
+        self.last_time = time.time()
+        self.forward_speed = 0
+        self.lateral_speed = 0
+        self.user_yaw_speed = 0  # Заданный пользователем yaw_speed
+
     def calibrate_all_esc(self):
         """
         Калибровка всех ESC одновременно. Устанавливаем максимальный и минимальный сигнал для всех двигателей.
         """
-        print("Starting ESC calibration...")
+        print("Начало калибровки ESC...")
 
         # Устанавливаем максимальный сигнал на всех ESC
         for motor in self.motors:
@@ -116,27 +122,99 @@ class SurfaceVehicle:
 
         # Устанавливаем минимальный сигнал на всех ESC
         for motor in self.motors:
-            motor.set_speed(-100)  # Реверсивный сигнал (-100%)
+            motor.set_speed(-100)  # Минимальный сигнал (-100%)
         time.sleep(2)  # Ждем 2 секунды
 
+        # Устанавливаем нулевой сигнал на всех ESC
         for motor in self.motors:
-            motor.set_speed(0)  # Нулевое положение (0%)
+            motor.set_speed(0)  # Нулевой сигнал (0%)
 
-        print("ESC calibration complete.")
+        print("Калибровка ESC завершена.")
+
+    def set_mode(self, mode):
+        """
+        Установка режима управления.
+
+        :param mode: Режим управления: 'manual' или 'stabilization'.
+        """
+        if mode not in ['manual', 'stabilization']:
+            raise ValueError("Недопустимый режим. Используйте 'manual' или 'stabilization'.")
+        self.mode = mode
+        print(f"Режим установлен: {mode}")
+        # Сброс PID-регулятора при переключении в режим стабилизации
+        if mode == 'stabilization':
+            self.pid_controller.reset()
+
+    def update_pid_settings(self, p_gain, i_gain, d_gain):
+        """
+        Обновление коэффициентов PID-регулятора.
+
+        :param p_gain: Пропорциональный коэффициент.
+        :param i_gain: Интегральный коэффициент.
+        :param d_gain: Дифференциальный коэффициент.
+        """
+        self.pid_controller.Kp = p_gain
+        self.pid_controller.Ki = i_gain
+        self.pid_controller.Kd = d_gain
+        print(f"Обновлены настройки PID: P={p_gain}, I={i_gain}, D={d_gain}")
 
     def set_motors(self, forward_speed, lateral_speed, yaw_speed):
         """
         Устанавливает скорость двигателей в зависимости от направлений по матрице.
 
         :param forward_speed: Скорость вперед/назад (-100 до 100).
-        :param yaw_speed: Скорость поворота (влево/вправо) (-100 до 100).
         :param lateral_speed: Скорость лагового движения (боковое движение) (-100 до 100).
+        :param yaw_speed: Скорость поворота (влево/вправо) (-100 до 100).
         """
+        self.forward_speed = forward_speed
+        self.lateral_speed = lateral_speed
+        self.user_yaw_speed = yaw_speed  # Сохраняем yaw_speed от пользователя
+
+        if self.mode == 'manual':
+            # В ручном режиме используем yaw_speed от пользователя
+            actual_yaw_speed = yaw_speed
+
+            # Рассчитываем и устанавливаем скорость для каждого двигателя
+            for i, motor in enumerate(self.motors):
+                speed = (self.motor_matrix[i][0] * self.forward_speed) + \
+                        (self.motor_matrix[i][1] * self.lateral_speed) + \
+                        (self.motor_matrix[i][2] * actual_yaw_speed)
+                motor.set_speed(speed)
+        elif self.mode == 'stabilization':
+            # В режиме стабилизации yaw_speed управляется PID-регулятором
+            # Устанавливаем целевое значение yaw в PID-регуляторе
+            self.pid_controller.setpoint = self.user_yaw_speed
+            # Двигатели будут обновлены в методе update_control()
+        else:
+            # Если режим неизвестен, останавливаем двигатели
+            self.stop()
+
+    def update_control(self, current_yaw):
+        """
+        Обновление управления двигателями на основе текущего угла yaw.
+
+        :param current_yaw: Текущее значение yaw (в градусах).
+        """
+        if self.mode != 'stabilization':
+            return  # В режиме 'manual' ничего не делаем
+
+        current_time = time.time()
+        dt = current_time - self.last_time
+        if dt <= 0:
+            dt = 0.01  # Предотвращаем деление на ноль
+        self.last_time = current_time
+
+        # Вычисляем управляющее воздействие PID-регулятора
+        yaw_correction = self.pid_controller.update(current_yaw, dt)
+
+        # Ограничиваем yaw_correction в диапазоне допустимых значений скорости
+        yaw_correction = max(-100, min(100, yaw_correction))
+
+        # Рассчитываем и устанавливаем скорость для каждого двигателя
         for i, motor in enumerate(self.motors):
-            # Рассчитываем скорость для каждого двигателя на основе матрицы
-            speed = (self.motor_matrix[i][0] * forward_speed) + \
-                    (self.motor_matrix[i][1] * lateral_speed) + \
-                    (self.motor_matrix[i][2] * yaw_speed)
+            speed = (self.motor_matrix[i][0] * self.forward_speed) + \
+                    (self.motor_matrix[i][1] * self.lateral_speed) + \
+                    (self.motor_matrix[i][2] * yaw_correction)
             motor.set_speed(speed)
 
     def move_forward(self, speed):
@@ -161,7 +239,7 @@ class SurfaceVehicle:
 
         :param speed: Скорость поворота (от -100 до 100).
         """
-        self.set_motors(0, speed, 0)
+        self.set_motors(0, 0, speed)
 
     def turn_left(self, speed):
         """
@@ -169,7 +247,7 @@ class SurfaceVehicle:
 
         :param speed: Скорость поворота (от -100 до 100).
         """
-        self.set_motors(0, -speed, 0)
+        self.set_motors(0, 0, -speed)
 
     def move_right(self, speed):
         """
@@ -177,7 +255,7 @@ class SurfaceVehicle:
 
         :param speed: Скорость от -100 до 100.
         """
-        self.set_motors(0, 0, speed)
+        self.set_motors(0, speed, 0)
 
     def move_left(self, speed):
         """
@@ -185,10 +263,13 @@ class SurfaceVehicle:
 
         :param speed: Скорость от -100 до 100.
         """
-        self.set_motors(0, 0, -speed)
+        self.set_motors(0, -speed, 0)
 
     def stop(self):
         """
         Остановить все двигатели.
         """
         self.set_motors(0, 0, 0)
+        # Останавливаем двигатели
+        for motor in self.motors:
+            motor.set_speed(0)
