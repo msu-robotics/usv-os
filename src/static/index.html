@@ -55,12 +55,16 @@
             margin-top: 0;
             color: #333;
         }
-        #joystick {
+        #joystick, #yawJoystick {
             border: 5px solid #888;
             border-radius: 50%;
             background: radial-gradient(circle, #ddd 50%, #aaa 100%);
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
             margin: 0 auto;
+        }
+        #yawJoystick {
+            border-radius: 10px;
+            background: linear-gradient(to right, #ddd, #aaa);
         }
         #magnetometerCanvas {
             border: 1px solid #888;
@@ -112,6 +116,10 @@
                 width: 250px;
                 height: 250px;
             }
+            #yawJoystick {
+                width: 250px;
+                height: 80px;
+            }
         }
     </style>
 </head>
@@ -136,6 +144,9 @@
             <div class="control-section">
                 <h2>Joystick Control</h2>
                 <canvas id="joystick" width="300" height="300"></canvas>
+                <!-- Джойстик для управления yaw -->
+                <h3>Yaw Control</h3>
+                <canvas id="yawJoystick" width="300" height="80"></canvas>
             </div>
 
             <!-- Секция магнетометра -->
@@ -160,6 +171,18 @@
         let knobX = centerX;
         let knobY = centerY;
         let isDragging = false;
+
+        // Переменные для джойстика yaw
+        let yawJoystick = document.getElementById("yawJoystick");
+        let yawCtx = yawJoystick.getContext("2d");
+        let yawWidth = yawJoystick.width;
+        let yawHeight = yawJoystick.height;
+        let yawCenterX = yawWidth / 2;
+        let yawCenterY = yawHeight / 2;
+        let yawRadius = yawWidth / 2 - 20;
+        let yawKnobX = yawCenterX;
+        let yawIsDragging = false;
+
         let speedMultiplier = 100;  // Мощность двигателей по умолчанию
 
         // Получаем канвас и контекст для магнетометра
@@ -196,6 +219,28 @@
             ctx.shadowOffsetY = 0;
         }
 
+        function drawYawJoystick() {
+            yawCtx.clearRect(0, 0, yawWidth, yawHeight);
+
+            // Рисуем основание джойстика (горизонтальная линия)
+            yawCtx.beginPath();
+            yawCtx.moveTo(20, yawCenterY);
+            yawCtx.lineTo(yawWidth - 20, yawCenterY);
+            yawCtx.strokeStyle = 'rgba(100, 100, 100, 0.5)';
+            yawCtx.lineWidth = 5;
+            yawCtx.stroke();
+
+            // Рисуем ручку джойстика yaw
+            yawCtx.beginPath();
+            yawCtx.arc(yawKnobX, yawCenterY, 20, 0, Math.PI * 2);
+            yawCtx.fillStyle = '#28a745';
+            yawCtx.fill();
+            yawCtx.shadowColor = 'rgba(40, 167, 69, 0.5)';
+            yawCtx.shadowBlur = 10;
+            yawCtx.shadowOffsetX = 0;
+            yawCtx.shadowOffsetY = 0;
+        }
+
         // Обработчик для событий мыши (для ПК)
         joystick.addEventListener('mousedown', function(e) {
             handleStart(e.clientX, e.clientY);
@@ -206,6 +251,10 @@
         });
 
         joystick.addEventListener('mouseup', function(e) {
+            handleEnd();
+        });
+
+        joystick.addEventListener('mouseleave', function(e) {
             handleEnd();
         });
 
@@ -266,7 +315,76 @@
             drawJoystick();
         }
 
+        // Обработчики событий для джойстика yaw
+        yawJoystick.addEventListener('mousedown', function(e) {
+            handleYawStart(e.clientX, e.clientY);
+        });
+
+        yawJoystick.addEventListener('mousemove', function(e) {
+            if (yawIsDragging) handleYawMove(e.clientX, e.clientY);
+        });
+
+        yawJoystick.addEventListener('mouseup', function(e) {
+            handleYawEnd();
+        });
+
+        yawJoystick.addEventListener('mouseleave', function(e) {
+            handleYawEnd();
+        });
+
+        // Сенсорные события для yaw
+        yawJoystick.addEventListener('touchstart', function(e) {
+            let touch = e.touches[0];
+            handleYawStart(touch.clientX, touch.clientY);
+        });
+
+        yawJoystick.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+            let touch = e.touches[0];
+            handleYawMove(touch.clientX, touch.clientY);
+        });
+
+        yawJoystick.addEventListener('touchend', function(e) {
+            handleYawEnd();
+        });
+
+        function handleYawStart(x, y) {
+            let rect = yawJoystick.getBoundingClientRect();
+            let dx = x - rect.left - yawKnobX;
+            let dy = y - rect.top - yawCenterY;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < 20) {
+                yawIsDragging = true;
+            }
+        }
+
+        function handleYawMove(x, y) {
+            if (!yawIsDragging) return;
+
+            let rect = yawJoystick.getBoundingClientRect();
+            let dx = x - rect.left - yawCenterX;
+
+            if (Math.abs(dx) < yawRadius) {
+                yawKnobX = x - rect.left;
+            } else {
+                yawKnobX = yawCenterX + yawRadius * Math.sign(dx);
+            }
+
+            let yawValue = (yawKnobX - yawCenterX) / yawRadius;
+
+            ws.send(JSON.stringify({ yaw: yawValue, speedMultiplier: speedMultiplier }));
+            drawYawJoystick();
+        }
+
+        function handleYawEnd() {
+            yawIsDragging = false;
+            yawKnobX = yawCenterX;
+            ws.send(JSON.stringify({ yaw: 0, speedMultiplier: speedMultiplier }));
+            drawYawJoystick();
+        }
+
         drawJoystick();
+        drawYawJoystick();
 
         // Обработка данных с магнетометра
         telemetry_ws.onmessage = function(event) {
