@@ -14,6 +14,7 @@ class ESC:
         :param frequency: Частота PWM сигнала (Гц)
         """
         self.pwm = PWM(Pin(pin))
+        self.current_speed = 0
         self.pwm.freq(frequency)
         self.min_pulse = min_pulse
         self.max_pulse = max_pulse
@@ -44,6 +45,8 @@ class ESC:
         elif speed > 100:
             speed = 100
 
+        self.current_speed = speed
+
         mid_pulse = (self.max_pulse + self.min_pulse) / 2
         scale = (mid_pulse - self.min_pulse)/100
 
@@ -69,6 +72,16 @@ class ESC:
         Остановить ESC.
         """
         self.set_speed(0)
+
+    def get_pulse_width(self):
+        """
+        Возвращает текущую ширину импульса в микросекундах.
+
+        :return: Ширина импульса в микросекундах.
+        """
+        # Преобразуем текущую скорость в значение ШИМ
+        pulse_width = ((self.current_speed + 100) / 200) * (self.max_pulse - self.min_pulse) + self.min_pulse
+        return pulse_width
 
 
 class SurfaceVehicle:
@@ -108,6 +121,8 @@ class SurfaceVehicle:
         self.forward_speed = 0
         self.lateral_speed = 0
         self.user_yaw_speed = 0  # Заданный пользователем yaw_speed
+        # Список для хранения текущих значений ШИМ в микросекундах
+        self.current_pwm_values = [0] * len(self.motors)
 
     def calibrate_all_esc(self):
         """
@@ -180,6 +195,8 @@ class SurfaceVehicle:
                         (self.motor_matrix[i][1] * self.lateral_speed) + \
                         (self.motor_matrix[i][2] * actual_yaw_speed)
                 motor.set_speed(speed)
+                # Преобразуем скорость в значение ШИМ в микросекундах и сохраняем
+                self.current_pwm_values[i] = motor.get_pulse_width()
         elif self.mode == 'stabilization':
             # В режиме стабилизации yaw_speed управляется PID-регулятором
             # Устанавливаем целевое значение yaw в PID-регуляторе
@@ -216,6 +233,8 @@ class SurfaceVehicle:
                     (self.motor_matrix[i][1] * self.lateral_speed) + \
                     (self.motor_matrix[i][2] * yaw_correction)
             motor.set_speed(speed)
+            # Преобразуем скорость в значение ШИМ в микросекундах и сохраняем
+            self.current_pwm_values[i] = motor.get_pulse_width()
 
     def move_forward(self, speed):
         """
@@ -273,3 +292,11 @@ class SurfaceVehicle:
         # Останавливаем двигатели
         for motor in self.motors:
             motor.set_speed(0)
+
+    def get_pwm_values(self):
+        """
+        Возвращает текущие значения ШИМ в микросекундах для каждого двигателя.
+
+        :return: Список значений ШИМ в микросекундах.
+        """
+        return self.current_pwm_values

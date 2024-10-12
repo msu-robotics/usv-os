@@ -107,15 +107,16 @@ async def websocket_handler(request, ws):
 @app.route('/telemetry')
 @with_websocket
 async def telemetry_handler(request, ws):
-    print('Подключено к телеметрии')
     while True:
         imu.read_data()
+        pwm_values = vehicle.get_pwm_values()
         telemetry = {
             'magnetometer': {
                 'roll': imu.roll,
                 'pitch': imu.pitch,
                 'yaw': imu.yaw
-            }
+            },
+            'pwm': pwm_values  # Добавляем поле pwm с данными ШИМ
         }
         await ws.send(json.dumps(telemetry))
         await asyncio.sleep(0.1)
