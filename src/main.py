@@ -9,14 +9,10 @@ import neopixel
 import network
 import socket
 import json
-import os
 
-# Настройки Wi-Fi
-WIFI_SSID = 'Photon-Home-2.4G'
-WIFI_PASSWORD = 'CgzxRdq4LQ5TwpN9'
 
 # Инициализация SurfaceVehicle с пинами двигателей
-motor_pins = [14, 15, 16, 17]  # Пример пинов для управления двигателями
+motor_pins = [12, 13, 14, 27]
 surface_vehicle = SurfaceVehicle(motor_pins)
 
 # Инициализация IMU
@@ -26,6 +22,8 @@ imu = IMU()
 surface_vehicle.pid_controller = PIDController(0.0, 0.0, 0.0)
 PID_SETTINGS_FILE = 'pid_settings.json'
 
+# Имя файла для хранения настроек Wi-Fi
+WIFI_SETTINGS_FILE = 'wifi_settings.json'
 
 # Инициализация АЦП
 adc = ADC(Pin(34))  # ADC1
@@ -87,12 +85,38 @@ client_address = None
 def connect_wifi():
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
-    if not wlan.isconnected():
-        print('Подключение к сети...')
-        wlan.connect(WIFI_SSID, WIFI_PASSWORD)
-        while not wlan.isconnected():
-            pass
-    print('Подключено к Wi-Fi. IP адрес:', wlan.ifconfig()[0])
+    # Загрузка настроек Wi-Fi из файла
+    try:
+        with open(WIFI_SETTINGS_FILE, 'r') as f:
+            wifi_data = json.load(f)
+            WIFI_SSID = wifi_data.get('ssid')
+            WIFI_PASSWORD = wifi_data.get('password')
+            print(f"Настройки Wi-Fi загружены: SSID='{WIFI_SSID}'")
+    except Exception as e:
+        print("Ошибка при загрузке настроек Wi-Fi:")
+        print(e)
+        WIFI_SSID = None
+        WIFI_PASSWORD = None
+
+    if WIFI_SSID and WIFI_PASSWORD:
+        if not wlan.isconnected():
+            print('Подключение к сети...')
+            wlan.connect(WIFI_SSID, WIFI_PASSWORD)
+            timeout = 10  # Таймаут в секундах
+            start = time.time()
+            while not wlan.isconnected():
+                if time.time() - start > timeout:
+                    print("Не удалось подключиться к Wi-Fi. Проверьте настройки.")
+                    return
+                pass
+        print('Подключено к Wi-Fi. IP адрес:', wlan.ifconfig()[0])
+    else:
+        print("Настройки Wi-Fi не заданы. Установка режима точки доступа (AP)...")
+        # Настройка точки доступа
+        ap = network.WLAN(network.AP_IF)
+        ap.active(True)
+        ap.config(essid='ESP32_AP')
+        print('Точка доступа запущена. SSID: ESP32_AP')
 
 
 # Функция для загрузки настроек PID-регулятора из файла
@@ -248,7 +272,7 @@ async def telemetry_task():
     while True:
         if client_address:
             # Чтение значения АЦП
-            adc_value = adc.read()
+            adc_value = (adc.read() / 4095) * 3.3 * 6.48
 
             # Подготовка данных телеметрии
             data = [CMD_TELEMETRY,
