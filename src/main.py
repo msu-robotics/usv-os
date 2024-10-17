@@ -304,7 +304,7 @@ async def telemetry_task():
     while True:
         if client_address:
             # Чтение значения АЦП
-            adc_value = (adc.read() / 4095) * 3.3 * 6.48
+            adc_value = adc.read()
 
             # Подготовка данных телеметрии
             data = [CMD_TELEMETRY,
