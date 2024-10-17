@@ -122,7 +122,7 @@ class SurfaceVehicle:
         self.lateral_speed = 0
         self.user_yaw_speed = 0  # Заданный пользователем yaw_speed
         # Список для хранения текущих значений ШИМ в микросекундах
-        self.current_pwm_values = [0] * len(self.motors)
+        self.current_pwm_values = [0.0] * len(self.motors)
 
     def calibrate_all_esc(self):
         """
