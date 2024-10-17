@@ -1,6 +1,6 @@
 import time
 from machine import Pin, PWM
-from src.pid_controller import PIDController
+from pid_controller import PIDController
 
 
 class ESC:
