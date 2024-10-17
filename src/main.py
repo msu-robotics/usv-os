@@ -10,8 +10,8 @@ import network
 import socket
 
 # Настройки Wi-Fi
-WIFI_SSID = 'Photon-Home-2.4G'
-WIFI_PASSWORD = 'CgzxRdq4LQ5TwpN9'
+WIFI_SSID = ''
+WIFI_PASSWORD = ''
 
 # Инициализация SurfaceVehicle с пинами двигателей
 motor_pins = [14, 15, 16, 17]  # Пример пинов для управления двигателями
