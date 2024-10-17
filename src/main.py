@@ -26,7 +26,7 @@ PID_SETTINGS_FILE = 'pid_settings.json'
 WIFI_SETTINGS_FILE = 'wifi_settings.json'
 
 # Инициализация АЦП
-adc = ADC(Pin(34))  # ADC1
+adc = ADC(Pin(34), atten=ADC.ATTN_11DB)  # ADC1
 
 # Инициализация управления GPIO пином
 gpio_pin = Pin(25, Pin.OUT)
