@@ -41,7 +41,7 @@ LED_MODE_OFF = 0
 LED_MODE_STATIC = 1
 LED_MODE_BLINK = 2
 LED_MODE_RAINBOW = 3
-current_led_mode = LED_MODE_OFF
+current_led_mode = LED_MODE_RAINBOW
 current_led_color = (255, 255, 255)  # По умолчанию белый цвет
 
 # Определение заголовков команд
@@ -52,6 +52,7 @@ CMD_LED = 0x04        # Команда для управления LED-лент�
 CMD_GPIO = 0x05       # Команда для управления GPIO пином
 CMD_MODE = 0x06       # Команда для переключения режима работы
 CMD_PROBE = 0x07      # Команда для управления пробой
+CMD_PROBE_CONTROL = 0x07  # Команда для управления пробоотборником
 
 # Форматы пакетов
 # Команда движения: заголовок (1 байт) + forward (float) + lateral (float) + yaw (float)
@@ -74,6 +75,9 @@ MODE_CMD_STRUCT = 'BB'    # B: unsigned char
 
 # Команда пробы: заголовок (1 байт) + режим (1 байт)
 PROBE_CMD_STRUCT = 'BB'   # B: unsigned char
+
+# Команда управления пробоотборником: заголовок (1 байт) + действие (1 байт) + таймаут (2 байта, unsigned short)
+PROBE_CONTROL_STRUCT = 'BBH'  # B: unsigned char, H: unsigned short (для таймаута в секундах)
 
 # Порт для приема UDP пакетов
 UDP_PORT = 5005
@@ -203,6 +207,11 @@ async def udp_receive_task():
                         packet = buffer[:packet_size]
                         buffer = buffer[packet_size:]
                         await process_mode_command(packet)
+                    elif header == CMD_PROBE_CONTROL and len(buffer) >= struct.calcsize(PROBE_CONTROL_STRUCT):
+                        packet_size = struct.calcsize(PROBE_CONTROL_STRUCT)
+                        packet = buffer[:packet_size]
+                        buffer = buffer[packet_size:]
+                        await process_probe_command(packet)
                     else:
                         # Недостаточно данных или неизвестный заголовок
                         break
@@ -264,6 +273,29 @@ async def process_mode_command(packet):
             print("Неизвестный режим работы получен")
     except Exception as e:
         print("Ошибка при обработке команды режима работы:", e)
+
+async def process_probe_command(packet):
+    try:
+        unpacked = struct.unpack(PROBE_CONTROL_STRUCT, packet)
+        _, action, timeout = unpacked
+        if action == 1:  # Вверх
+            # Запустить пробоотборник вверх на заданное время
+            surface_vehicle.probe('up')
+        elif action == 2:  # Вниз
+            # Запустить пробоотборник вниз на заданное время
+            surface_vehicle.probe('down')
+        elif action == 3:  # Стоп
+            # Остановить пробоотборник
+            surface_vehicle.probe('stop')
+        else:
+            print("Неизвестное действие для пробоотборника")
+        if timeout > 0:
+            await asyncio.sleep(timeout)
+            print(f"Пробоотборник будет остановлен через {timeout} сек")
+            surface_vehicle.probe('stop')
+
+    except Exception as e:
+        print("Ошибка при обработке команды пробоотборника:", e)
 
 # Асинхронная задача для отправки телеметрии по UDP
 async def telemetry_task():

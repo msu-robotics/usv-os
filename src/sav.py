@@ -121,6 +121,10 @@ class SurfaceVehicle:
         self.forward_speed = 0
         self.lateral_speed = 0
         self.user_yaw_speed = 0  # Заданный пользователем yaw_speed
+        self.probe_motor_1 = Pin(26, Pin.OUT)
+        self.probe_motor_2 = Pin(33, Pin.OUT)
+        self.probe_motor_3 = Pin(32, Pin.OUT)
+        self.probe_motor_4 = Pin(25, Pin.OUT)
         # Список для хранения текущих значений ШИМ в микросекундах
         self.current_pwm_values = [0.0] * len(self.motors)
 
@@ -145,6 +149,24 @@ class SurfaceVehicle:
             motor.set_speed(0)  # Нулевой сигнал (0%)
 
         print("Калибровка ESC завершена.")
+
+    def probe(self, direction):
+        if direction == 'up':
+            self.probe_motor_1.off()
+            self.probe_motor_2.on()
+            self.probe_motor_3.off()
+            self.probe_motor_4.on()
+        elif direction == 'down':
+            self.probe_motor_2.off()
+            self.probe_motor_1.on()
+            self.probe_motor_4.off()
+            self.probe_motor_3.on()
+        else:
+            self.probe_motor_1.off()
+            self.probe_motor_2.off()
+            self.probe_motor_3.off()
+            self.probe_motor_4.off()
+        print(f'Установленно значение для пробоотборника {direction}')
 
     def set_mode(self, mode):
         """
