@@ -28,7 +28,7 @@ class PIDController:
         :param dt: Время, прошедшее с последнего вызова (в секундах)
         :return: Вычисленное управляющее воздействие
         """
-        error = self.setpoint - measurement
+        error = abs(self.setpoint) - abs(measurement)
 
         # Пропорциональная составляющая
         P = self.Kp * error
