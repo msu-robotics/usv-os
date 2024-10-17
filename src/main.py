@@ -8,10 +8,12 @@ import struct
 import neopixel
 import network
 import socket
+import json
+import os
 
 # Настройки Wi-Fi
-WIFI_SSID = ''
-WIFI_PASSWORD = ''
+WIFI_SSID = 'Photon-Home-2.4G'
+WIFI_PASSWORD = 'CgzxRdq4LQ5TwpN9'
 
 # Инициализация SurfaceVehicle с пинами двигателей
 motor_pins = [14, 15, 16, 17]  # Пример пинов для управления двигателями
@@ -22,6 +24,8 @@ imu = IMU()
 
 # Инициализация PID-регулятора (начальные коэффициенты устанавливаются в ноль)
 surface_vehicle.pid_controller = PIDController(0.0, 0.0, 0.0)
+PID_SETTINGS_FILE = 'pid_settings.json'
+
 
 # Инициализация АЦП
 adc = ADC(Pin(34))  # ADC1
@@ -59,7 +63,7 @@ MOVE_CMD_STRUCT = 'Bfff'  # B: unsigned char, f: float
 PID_CMD_STRUCT = 'Bfff'
 
 # Данные телеметрии: заголовок (1 байт) + roll (float) + pitch (float) + yaw (float) + adc_value (float) + pwm двигателей (float * 4)
-TELEMETRY_STRUCT = 'Bffffffff'  # B: unsigned char, f: float
+TELEMETRY_STRUCT = 'Bfffffffffff'  # B: unsigned char, f: float
 
 # Команда LED: заголовок (1 байт) + режим (1 байт) + R (1 байт) + G (1 байт) + B (1 байт)
 LED_CMD_STRUCT = 'BBBBB'  # B: unsigned char
@@ -89,6 +93,40 @@ def connect_wifi():
         while not wlan.isconnected():
             pass
     print('Подключено к Wi-Fi. IP адрес:', wlan.ifconfig()[0])
+
+
+# Функция для загрузки настроек PID-регулятора из файла
+def load_pid_settings():
+    global pid_controller
+    try:
+        with open(PID_SETTINGS_FILE, 'r') as f:
+            pid_data = json.load(f)
+            p_gain = pid_data.get('p_gain', 0.0)
+            i_gain = pid_data.get('i_gain', 0.0)
+            d_gain = pid_data.get('d_gain', 0.0)
+            pid_controller.Kp = p_gain
+            pid_controller.Ki = i_gain
+            pid_controller.Kd = d_gain
+            print(f"Настройки PID загружены: P={p_gain}, I={i_gain}, D={d_gain}")
+    except Exception as e:
+        print("Не удалось загрузить настройки PID, используются значения по умолчанию.")
+        print("Ошибка:", e)
+
+
+def save_pid_settings(p_gain, i_gain, d_gain):
+    pid_data = {
+        'p_gain': p_gain,
+        'i_gain': i_gain,
+        'd_gain': d_gain
+    }
+    try:
+        with open(PID_SETTINGS_FILE, 'w') as f:
+            json.dump(pid_data, f)
+        print(f"Настройки PID сохранены: P={p_gain}, I={i_gain}, D={d_gain}")
+    except Exception as e:
+        print("Ошибка при сохранении настроек PID:")
+        print(e)
+
 
 # Асинхронная задача для чтения данных с IMU
 async def imu_task():
@@ -159,11 +197,14 @@ async def process_movement_command(packet):
         print("Ошибка при обработке команды движения:", e)
 
 async def process_pid_command(packet):
+    global pid_controller
     try:
         unpacked = struct.unpack(PID_CMD_STRUCT, packet)
         _, p_gain, i_gain, d_gain = unpacked
         # Обновление параметров PID-регулятора
         surface_vehicle.update_pid_settings(p_gain, i_gain, d_gain)
+        # Сохранение настроек PID в файл
+        save_pid_settings(p_gain, i_gain, d_gain)
     except Exception as e:
         print("Ошибка при обработке команды PID:", e)
 
@@ -214,7 +255,11 @@ async def telemetry_task():
                 imu.roll,
                 imu.pitch,
                 imu.yaw,
-                float(adc_value)] + surface_vehicle.get_pwm_values()
+                float(adc_value)] + surface_vehicle.get_pwm_values() + [
+                surface_vehicle.pid_controller.Kp,
+                surface_vehicle.pid_controller.Ki,
+                surface_vehicle.pid_controller.Kd,
+            ]
             packet = struct.pack(TELEMETRY_STRUCT,*data)
             # Отправка данных телеметрии по UDP
             try:

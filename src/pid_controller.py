@@ -29,30 +29,23 @@ class PIDController:
         :return: Вычисленное управляющее воздействие
         """
         error = self.setpoint - measurement
-        print(f"Error: {error}")
 
         # Пропорциональная составляющая
         P = self.Kp * error
-        print(f"P (Proportional): {P}")
 
         # Интегральная составляющая
         self._integral += error * dt
         I = self.Ki * self._integral
-        print(f"I (Integral): {I}")
 
         # Дифференциальная составляющая
         D = 0
         if self._prev_error is not None:
             derivative = (error - self._prev_error) / dt
             D = self.Kd * derivative
-            print(f"D (Derivative): {D}")
-        else:
-            print("D (Derivative): Not calculated (first run)")
         self._prev_error = error
 
         # Общий выход PID
         output = P + I + D
-        print(f"PID Output before limits: {output}")
 
         # Применение ограничений на выход
         min_output, max_output = self._output_limits
@@ -60,7 +53,6 @@ class PIDController:
             output = max(min_output, output)
         if max_output is not None:
             output = min(max_output, output)
-        print(f"PID Output after limits: {output}")
 
         return output
 
