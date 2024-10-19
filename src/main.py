@@ -12,7 +12,7 @@ import json
 
 
 # Инициализация SurfaceVehicle с пинами двигателей
-motor_pins = [12, 13, 14, 27]
+motor_pins = [27, 12, 14, 13]
 surface_vehicle = SurfaceVehicle(motor_pins)
 
 # Инициализация IMU
