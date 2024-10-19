@@ -14,6 +14,7 @@ class PIDController:
     def update(self, measurement, dt):
         # Вычисление угловой ошибки с учетом цикличности
         error = (self.setpoint - measurement + 180) % 360 - 180
+        print(f'error: {error}, measurement: {measurement}, setpoint: {self.setpoint}')
 
         # Пропорциональная составляющая
         P = self.Kp * error
